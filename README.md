@@ -35,4 +35,4 @@ StratSynth AI is not just a scraper; it's a methodology-driven engine. It implem
 ## 🚀 Quick Start
 1. **Clone the repo:**
    ```bash
-   git clone [https://github.com/your-username/StratSynth-AI.git](https://github.com/your-username/StratSynth-AI.git)
+   git clone [https://github.com/your-username/StratSynth-AI.git](https://github.com/mihran-w/StratSynth-AI.git)
