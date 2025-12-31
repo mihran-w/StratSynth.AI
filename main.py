@@ -12,22 +12,19 @@ GEMINI_API_KEY = "YOUR_GEMINI_KEY"
 genai.configure(api_key=GEMINI_API_KEY)
 
 def extract_text_from_pdf(pdf_path):
-    """Extracts text from the first and last few pages of a PDF paper."""
     try:
         reader = PdfReader(pdf_path)
         text = ""
         total_pages = len(reader.pages)
         pages_to_read = list(range(min(5, total_pages))) + list(range(max(0, total_pages-5), total_pages))
-        
         for i in sorted(set(pages_to_read)):
             page_text = reader.pages[i].extract_text()
-            if page_text:
-                text += page_text
+            if page_text: text += page_text
         return text
     except Exception as e:
-        print(f"Error reading paper {pdf_path}: {e}")
+        print(f"Error reading {pdf_path}: {e}")
         return ""
-
+    
 def call_openai(prompt, model="gpt-4o"):
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
@@ -43,54 +40,56 @@ def call_claude(prompt):
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )
-    return message.content[0].text
 
 def call_gemini(prompt):
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     response = model.generate_content(prompt)
     return response.text
+
 
 prompt_file_path = "prompts/prompts.xlsx"
 prompts_df = pd.read_excel(prompt_file_path)
 prompts_dict = dict(zip(prompts_df.iloc[:, 0], prompts_df.iloc[:, 1]))
-print(prompts_dict)
 
 folder_path = "papers/"
-all_results = []
-
-if not os.path.exists(folder_path):
-    print(f"Error: Folder '{folder_path}' not found!")
-    exit()
+results_gpt = []
+results_claude = []
+results_gemini = []
 
 for filename in os.listdir(folder_path):
     if filename.endswith(".pdf"):
-        print(f"🚀 Processing Paper: {filename}...")
-        file_path = os.path.join(folder_path, filename)
-        paper_text = extract_text_from_pdf(file_path)
+        print(f"🚀 Processing: {filename}")
+        paper_text = extract_text_from_pdf(os.path.join(folder_path, filename))
         
-        if not paper_text:
-            print(f"⚠️ Skipping {filename}: Extraction failed.")
-            continue
-        
-        row_data = {"Paper Name": filename}
-        
+        if not paper_text: continue
+
+        res_gpt = {"Paper Name": filename}
+        res_claude = {"Paper Name": filename}
+        res_gemini = {"Paper Name": filename}
+
         for rq_name, rq_prompt in prompts_dict.items():
-            print(f"   🔍 Analyzing {rq_name}...")
-            
             full_prompt = f"PAPER CONTENT:\n{paper_text}\n\nINSTRUCTION:\n{rq_prompt}"
             
             try:
-                row_data[f"{rq_name}_GPT"] = call_openai(full_prompt)
-                row_data[f"{rq_name}_Claude"] = call_claude(full_prompt)
-                row_data[f"{rq_name}_Gemini"] = call_gemini(full_prompt)
+                print(f"   🔍 Analyzing {rq_name} with Gemini...")
+                res_gemini[rq_name] = call_gemini(full_prompt)
+                
+                res_gpt[rq_name] = call_openai(full_prompt)
+                res_claude[rq_name] = call_claude(full_prompt)
             except Exception as e:
-                print(f"   ❌ API Error for {rq_name}: {e}")
-                row_data[f"{rq_name}_GPT"] = "Error"
-                row_data[f"{rq_name}_Claude"] = "Error"
-                row_data[f"{rq_name}_Gemini"] = "Error"
-            
-        all_results.append(row_data)
+                print(f"   ❌ Error: {e}")
+                res_gemini[rq_name] = "Error"
 
-output_df = pd.DataFrame(all_results)
-output_df.to_excel("StratSynth_Final_Analysis.xlsx", index=False)
+        results_gemini.append(res_gemini)
+        results_gpt.append(res_gpt)
+        results_claude.append(res_claude)
+
+with pd.ExcelWriter("StratSynth_Final_Analysis.xlsx", engine="xlsxwriter") as writer:
+    if results_gemini:
+        pd.DataFrame(results_gemini).to_excel(writer, sheet_name="Gemini_Results", index=False)
+    if results_gpt:
+        pd.DataFrame(results_gpt).to_excel(writer, sheet_name="GPT_Results", index=False)
+    if results_claude:
+        pd.DataFrame(results_claude).to_excel(writer, sheet_name="Claude_Results", index=False)
+
 print("\n✅ Process Completed! Check 'StratSynth_Final_Analysis.xlsx'.")
